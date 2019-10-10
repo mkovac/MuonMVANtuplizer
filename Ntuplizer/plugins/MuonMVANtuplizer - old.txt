@@ -35,17 +35,19 @@
 #include "RecoEgamma/EgammaTools/interface/MVAVariableManager.h" // Specify variables using .txt file
 #include "RecoEgamma/EgammaTools/interface/MultiToken.h"
 
+
 #include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
 #include "DataFormats/VertexReco/interface/Vertex.h"
 #include "DataFormats/VertexReco/interface/VertexFwd.h"
 
 #include "MuonMVAReader/Reader/interface/MuonGBRForestReader.hpp"
-#include "PileUpWeight/PileUpWeight/interface/PileUpWeight.h"
 
 #include "TTree.h"
 #include "TFile.h"
 #include "Math/VectorUtil.h"
 #include "TLorentzVector.h"
+
+int YEAR = 2018;
 
 //
 // class declaration
@@ -93,8 +95,7 @@ class MuonMVANtuplizer:public edm::one::EDAnalyzer<edm::one::SharedResources> {
 
       // Global variables
       int nEvent_, nRun_, nLumi_;
-      int n_obs_int_;
-      int n_true_int_;
+      int genNpu_;
       int vtxN_;
       int n_muons_;
 
@@ -104,6 +105,7 @@ class MuonMVANtuplizer:public edm::one::EDAnalyzer<edm::one::SharedResources> {
       double mu_eta_;
       double mu_phi_;
       double mu_E_;
+      double Z_mass_;
 
       int matchedToGenMu_;
       int matchedToGenMu_POG_codes_;
@@ -115,21 +117,12 @@ class MuonMVANtuplizer:public edm::one::EDAnalyzer<edm::one::SharedResources> {
       bool is_tracker_mu_;
       bool is_pf_mu_;
       
-      int n_matched_stations_;      
+      int mu_N_hits_;
+      int mu_N_matched_stations_;
+      int mu_N_pixel_hits_;
+      int mu_N_tracker_hits_;
       
-      // TrackQualityVariables
-      int tk_valid_hits_;
-      int tk_valid_pixel_hits_;
-      int tk_tracker_lay_;
-      int tk_pixel_lay_;
-      double tk_chi2_;
-      double tk_pT_error_;
-
-            
-      // GlobalTrackQualityVariables
-      int glb_valid_mu_hits_;
-      double glb_chi2_;
-      double glb_pT_error_;
+      double mu_chi_square_;
       
       // Vertexing
       double mu_ip_;
@@ -145,9 +138,7 @@ class MuonMVANtuplizer:public edm::one::EDAnalyzer<edm::one::SharedResources> {
       double mu_rho_;
       
       double mu_dR_;
-      float MVA_score_;
-      
-      double PU_weight_;
+      float score_;
 
 
       // ID decisions and categories
@@ -161,6 +152,9 @@ class MuonMVANtuplizer:public edm::one::EDAnalyzer<edm::one::SharedResources> {
       const double pT_threshold_;
       int setup_;
       
+      TLorentzVector *mu_p_ = new TLorentzVector();
+      TLorentzVector *mu_m_ = new TLorentzVector();
+
 
       // ID decisions objects
 //      const std::vector< std::string > eleMapTags_;
@@ -188,11 +182,7 @@ class MuonMVANtuplizer:public edm::one::EDAnalyzer<edm::one::SharedResources> {
       edm::EDGetTokenT<double> rhoToken;
       
       // MVA reader
-//      MuonGBRForestReader *r;
-
-      // PU weight
-      PileUpWeight *pileUpReweight;
-
+      MuonGBRForestReader *r;
 
 };
 
@@ -275,8 +265,7 @@ MuonMVANtuplizer::MuonMVANtuplizer(const edm::ParameterSet& iConfig)
    tree_->Branch("nLumi",   &nLumi_);
    tree_->Branch("n_muons", &n_muons_);
    
-   if (is_MC_) tree_->Branch("n_obs_int",  &n_obs_int_);
-   if (is_MC_) tree_->Branch("n_true_int", &n_true_int_);
+   if (is_MC_) tree_->Branch("genNpu", &genNpu_);
    
    tree_->Branch("vtxN",   &vtxN_);
 
@@ -285,29 +274,18 @@ MuonMVANtuplizer::MuonMVANtuplizer(const edm::ParameterSet& iConfig)
    tree_->Branch("mu_eta", &mu_eta_);
    tree_->Branch("mu_phi", &mu_phi_);
    tree_->Branch("mu_E",   &mu_E_);
-//   tree_->Branch("Z_mass", &Z_mass_);
+   tree_->Branch("Z_mass", &Z_mass_);
    
    tree_->Branch("is_global_mu",  &is_global_mu_);
    tree_->Branch("is_tracker_mu", &is_tracker_mu_);
    tree_->Branch("is_pf_mu",      &is_pf_mu_);
    
-   tree_->Branch("n_matched_stations", &n_matched_stations_);
+   tree_->Branch("mu_N_hits",             &mu_N_hits_);
+   tree_->Branch("mu_N_matched_stations", &mu_N_matched_stations_);
+   tree_->Branch("mu_N_pixel_hits",       &mu_N_pixel_hits_);
+   tree_->Branch("mu_N_tracker_hits",     &mu_N_tracker_hits_);
+   tree_->Branch("mu_chi_square",         &mu_chi_square_);
    
-   
-   // TrackQualityVariables
-   tree_->Branch("tk_valid_hits",       &tk_valid_hits_);
-   tree_->Branch("tk_valid_pixel_hits", &tk_valid_pixel_hits_);
-   tree_->Branch("tk_tracker_lay",      &tk_tracker_lay_);
-   tree_->Branch("tk_pixel_lay",        &tk_pixel_lay_);
-   tree_->Branch("tk_chi2",             &tk_chi2_);
-   tree_->Branch("tk_pT_error",         &tk_pT_error_);
-   
-   
-   // GlobalTrackQualityVariables
-   tree_->Branch("glb_valid_mu_hits",     &glb_valid_mu_hits_);
-   tree_->Branch("glb_chi2",              &glb_chi2_);
-   tree_->Branch("glb_pT_error",          &glb_pT_error_);
- 
    tree_->Branch("mu_ip",       &mu_ip_);
    tree_->Branch("mu_ip_error", &mu_ip_error_);
    tree_->Branch("mu_sip",      &mu_sip_);
@@ -319,12 +297,9 @@ MuonMVANtuplizer::MuonMVANtuplizer(const edm::ParameterSet& iConfig)
    tree_->Branch("mu_pf_photon_iso",      &mu_pf_photon_iso_);
    tree_->Branch("mu_pu_charged_had_iso", &mu_pu_charged_had_iso_);
    tree_->Branch("mu_rho", &mu_rho_);
-   
    tree_->Branch("mu_dR", &mu_dR_);
    
-   tree_->Branch("MVA_score", &MVA_score_);
-
-   tree_->Branch("PU_weight", &PU_weight_);
+   tree_->Branch("score", &score_);
 
 
    if (is_MC_)
@@ -359,12 +334,9 @@ MuonMVANtuplizer::MuonMVANtuplizer(const edm::ParameterSet& iConfig)
    // Tags from the variable helper
 //   mvaVarMngr_.setConsumes(consumesCollector());
 
-//   r = new MuonGBRForestReader(YEAR);
+   r = new MuonGBRForestReader(YEAR);
 
-   // PU weight
-   pileUpReweight = new PileUpWeight(2016, 2016);
 }
-
 
 
 // Destructor
@@ -402,20 +374,17 @@ void MuonMVANtuplizer::analyze(const edm::Event &iEvent, const edm::EventSetup &
    vtxN_ = vertices->size();
 
    // Fill with true number of pileup
-   if ( is_MC_ )
+   if (is_MC_)
    {
       for (const auto &pu : *pileup)
       {
-         if ( pu.getBunchCrossing() == 0 )
+         int bx = pu.getBunchCrossing();
+         if (bx == 0)
          {
-            n_obs_int_ = pu.getPU_NumInteractions();
-            n_true_int_ = pu.getTrueNumInteractions();
+            genNpu_ = pu.getPU_NumInteractions();
             break;
          }
       }
-      
-      PU_weight_ = pileUpReweight->weight(n_true_int_);
-//      cout << PU_weight_ << endl;
    }
 
     // Get MVA decisions
@@ -454,6 +423,8 @@ void MuonMVANtuplizer::analyze(const edm::Event &iEvent, const edm::EventSetup &
       mu_E_   = mu->energy();
       
       n_muons_ = src->size();
+      
+      
 
       if (mu->pt() < pT_threshold_) continue;
 
@@ -490,58 +461,48 @@ void MuonMVANtuplizer::analyze(const edm::Event &iEvent, const edm::EventSetup &
 //         cout << "Muon POG = " << matchedToGenMuPOG_ << endl;
       }
       
-      
-      
       is_global_mu_  = mu->isGlobalMuon();
       is_tracker_mu_ = mu->isTrackerMuon();
       is_pf_mu_      = mu->isPFMuon(); // Particle-Flow muon id
 
-
-      // GlobalTrackQualityVariables
-      if ( mu->globalTrack().isNonnull() )
+      if (is_global_mu_)
       {
-         glb_valid_mu_hits_ = (mu->globalTrack()->hitPattern().numberOfValidMuonHits());
-         glb_chi2_          = (mu->globalTrack()->normalizedChi2());
-         glb_pT_error_      = (mu->globalTrack()->ptError()); 
+         // Number of muon chamber hits included in the the global muon track fit
+         mu_N_hits_ = (mu->globalTrack()->hitPattern().numberOfValidMuonHits());
+         
+         // Chi2 of the global track fit
+         mu_chi_square_ = (mu->globalTrack()->normalizedChi2());
       }
       else
       {
-         glb_valid_mu_hits_ = -1;
-         glb_chi2_          = -1;
-         glb_pT_error_      = -1;
+         mu_N_hits_     = -1;
+         mu_chi_square_ = -1;
       }
       
       // Muon segments in at least two muon stations. This implies that the muon is also an arbitrated tracker muon.
-      n_matched_stations_ = mu->numberOfMatchedStations();
+      mu_N_matched_stations_ = mu->numberOfMatchedStations();
       
-      
-      
-      // TrackQualityVariables
-      reco::TrackRef track = mu->innerTrack();
-//      valid_KF = (myTrackRef.isAvailable());
-//      valid_KF = (myTrackRef.isNonnull());
+      // Number of hits in the pixel detector
+      bool valid_KF = false;
+      reco::TrackRef myTrackRef = mu->innerTrack();
+      valid_KF = (myTrackRef.isAvailable());
+      valid_KF = (myTrackRef.isNonnull());
 
 
-      if ( track.isNonnull() )
+      if (valid_KF)
       {
-         tk_valid_hits_       = mu->innerTrack()->hitPattern().numberOfValidHits();
-         tk_valid_pixel_hits_ = mu->innerTrack()->hitPattern().numberOfValidPixelHits();
-         tk_tracker_lay_      = mu->innerTrack()->hitPattern().trackerLayersWithMeasurement();
-         tk_pixel_lay_        = mu->innerTrack()->hitPattern().pixelLayersWithMeasurement();
-         tk_chi2_             = mu->innerTrack()->normalizedChi2();
-         tk_pT_error_         = mu->innerTrack()->ptError();
+         // Number of pixel hits
+         mu_N_pixel_hits_ = mu->innerTrack()->hitPattern().numberOfValidPixelHits();
+      
+         // Number of hits in the tracker layers
+         mu_N_tracker_hits_ = mu->innerTrack()->hitPattern().trackerLayersWithMeasurement();
       }
       else
       {
-         tk_valid_hits_       = -1;
-         tk_valid_pixel_hits_ = -1;
-         tk_tracker_lay_      = -1;
-         tk_pixel_lay_        = -1;
-         tk_chi2_             = -1;
-         tk_pT_error_         = -1;
+         mu_N_pixel_hits_ = -1;
+         mu_N_tracker_hits_ = -1;
       }
     
-      
       // Vertexing
       double IP       = fabs(mu->dB(pat::Muon::PV3D));
       double IP_error = mu->edB(pat::Muon::PV3D);
@@ -598,13 +559,22 @@ void MuonMVANtuplizer::analyze(const edm::Event &iEvent, const edm::EventSetup &
 //         mvaCats_[k] = (*mvaCats[k])[ele];
 //      }
 
+
+		if ( mu_Q_ == 1 )  mu_p_->SetPtEtaPhiE(mu_pT_, mu_eta_, mu_phi_, mu_E_);
+		if ( mu_Q_ == -1 ) mu_m_->SetPtEtaPhiE(mu_pT_, mu_eta_, mu_phi_, mu_E_);		
+
       
-//      MVA_score_ = r->Get_MVA_value(mu_pT_, mu_eta_, glb_valid_mu_hits_, tk_valid_hits_, tk_valid_pixel_hits_, glb_chi2_, mu_pf_photon_iso_,
-//                          mu_pf_charged_had_iso_, mu_pf_neutral_had_iso_, mu_rho_, mu_sip_, mu_dxy_, mu_dz_);
+      score_ = r->Get_MVA_value(mu_pT_, mu_eta_, mu_N_hits_, mu_N_pixel_hits_, mu_N_tracker_hits_, mu_chi_square_, mu_pf_photon_iso_,
+                          mu_pf_charged_had_iso_, mu_pf_neutral_had_iso_, mu_rho_, mu_sip_, mu_dxy_, mu_dz_);
                           
       tree_->Fill();
  
-   } 
+   }
+   
+//   auto Z_ = (*mu_p_) + (*mu_m_);
+//   cout << "Z mass = " << Z_.M() << endl;
+
+   
 }
 
 

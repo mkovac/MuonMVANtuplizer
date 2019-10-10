@@ -7,7 +7,7 @@ LEPTON_SETUP = 2016
 
 # Silence output
 process.load("FWCore.MessageService.MessageLogger_cfi")
-process.MessageLogger.cerr.FwkReport.reportEvery = 1000
+process.MessageLogger.cerr.FwkReport.reportEvery = 100
 
 
 process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
@@ -17,13 +17,13 @@ process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:run2_mc', '')
 
 outputFile = "muon_ntuple.root"
 
-process.maxEvents = cms.untracked.PSet(input = cms.untracked.int32(500))
-#process.maxEvents = cms.untracked.PSet(input = cms.untracked.int32(-1))
+#process.maxEvents = cms.untracked.PSet(input = cms.untracked.int32(10000))
+process.maxEvents = cms.untracked.PSet(input = cms.untracked.int32(-1))
 
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
-         '/store/mc/RunIISpring18MiniAOD/DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8/MINIAODSIM/100X_upgrade2018_realistic_v10-v1/70000/FEA6B290-5424-E811-B6F2-008CFAC93E5C.root'
+         '/store/mc/RunIISpring18MiniAOD/DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8/MINIAODSIM/100X_upgrade2018_realistic_v10-v1/70000/AC5CFA46-C52E-E811-8D7D-FA163E7FD764.root'
     )
 )
 

@@ -13,6 +13,7 @@
 
 <use name="TrackingTools/IPTools"/>
 <use name="MuonMVAReader/Reader"/>
+<use name="PileUpWeight/PileUpWeight"/>
 
 
 <use name="root"/>
